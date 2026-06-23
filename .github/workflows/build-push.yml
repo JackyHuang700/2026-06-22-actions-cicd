@@ -58,3 +58,29 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # - name: Deploy to Aliyun ECS via SSH
+      #   if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' # 僅在 main 分支 push 時觸發部署
+      #   uses: appleboy/ssh-action@v1.0.3
+      #   with:
+      #     host: ${{ secrets.ECS_HOST }}          # ECS 的公網 IP
+      #     username: ${{ secrets.ECS_USERNAME }}  # 登入帳號（例如 root）
+      #     key: ${{ secrets.ECS_SSH_KEY }}        # 你的 SSH 私鑰 (Private Key)
+      #     port: 22
+      #     script: |
+      #       # 1. 登入 Docker Hub (如果你的鏡像是私有的)
+      #       echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      #       # 2. 拉取最新鏡像 (以 latest 為例，你也可以改成動態 tag)
+      #       docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+      #       # 3. 停止並刪除舊容器
+      #       docker stop ${{ env.IMAGE_NAME }} || true
+      #       docker rm ${{ env.IMAGE_NAME }} || true
+
+      #       # 4. 運行新容器 (請根據你的實際需求調整 port 和環境變數)
+      #       docker run -d \
+      #         --name ${{ env.IMAGE_NAME }} \
+      #         -p 80:80 \
+      #         --restart always \
+      #         ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
