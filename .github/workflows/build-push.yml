@@ -68,27 +68,48 @@ jobs:
           key: ${{ secrets.ECS_SSH_KEY }}
           port: 22
           script: |
-            # 1. 設定 kind 集群上下文
-            export KUBECONFIG=/root/.kube/config
-            kubectl config use-context kind-clouds-web-cluster
+            set -e
 
-            # 2. 更新 docker registry secret
+            export KUBECONFIG=/root/.kube/config
+            CLUSTER_NAME="clouds-web-cluster"
+            DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            IMAGE_TAG="${{ steps.meta.outputs.version }}"
+
+            # 1. 檢查 kind 集群是否存在，若不存在則建立
+            if ! kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+              echo "📦 Creating kind cluster: ${CLUSTER_NAME}"
+              kind create cluster --name "${CLUSTER_NAME}"
+            else
+              echo "✅ Kind cluster exists: ${CLUSTER_NAME}"
+            fi
+
+            # 2. 設定集群上下文
+            kubectl config use-context "kind-${CLUSTER_NAME}"
+
+            # 3. 建立 docker registry secret
+            echo "🔐 Creating Docker registry secret..."
             kubectl delete secret dockerhub-secret --ignore-not-found
             kubectl create secret docker-registry dockerhub-secret \
               --docker-server=docker.io \
-              --docker-username="${{ secrets.DOCKERHUB_USERNAME }}" \
+              --docker-username="${DOCKERHUB_USERNAME}" \
               --docker-password="${{ secrets.DOCKERHUB_TOKEN }}" \
               --docker-email="ci@example.com"
 
-            # 3. 更新部署鏡像標籤
-            kubectl set image deployment/clouds-web \
-              clouds-web=${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} \
-              --record
+            # 4. 替換 deployment.yaml 中的用戶名並應用
+            echo "📋 Applying Kubernetes manifests..."
+            sed "s/YOUR_DOCKERHUB_USERNAME/${DOCKERHUB_USERNAME}/g" k8s/deployment.yaml | kubectl apply -f -
 
-            # 4. 等待部署更新完成
-            kubectl rollout status deployment/clouds-web -w
+            # 5. 更新部署鏡像（使用 kubectl patch）
+            echo "🔄 Updating image to ${IMAGE_TAG}..."
+            kubectl patch deployment clouds-web --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/containers/0/image', 'value':'${{ env.REGISTRY }}/${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}'}]"
 
-            # 5. 查看部署狀態
+            # 6. 等待部署更新完成
+            echo "⏳ Waiting for rollout..."
+            kubectl rollout status deployment/clouds-web --timeout=5m
+
+            # 7. 查看部署狀態
+            echo ""
             echo "=== Deployment Status ==="
             kubectl get pods -l app=clouds-web
             kubectl get svc clouds-web-service
