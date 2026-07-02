@@ -59,7 +59,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Aliyun ECS via SSH
+      - name: Deploy to Aliyun ECS via SSH with Docker
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' # 僅在 main 分支 push 時觸發部署
         uses: appleboy/ssh-action@v1.0.3
         with:
