@@ -56,11 +56,12 @@ metadata:
   labels:
     app: clouds-web
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: clouds-web
   ports:
   - protocol: TCP
     port: 80
     targetPort: 3000
+    nodePort: 30818
     name: http
