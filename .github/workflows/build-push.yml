@@ -75,6 +75,22 @@ jobs:
             DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
             IMAGE_NAME="${{ env.IMAGE_NAME }}"
             IMAGE_TAG="${{ steps.meta.outputs.version }}"
+            REPO_DIR="/opt/clouds-web"
+            GITHUB_REPO="${{ github.server_url }}/${{ github.repository }}"
+
+            # 0. 克隆或更新项目仓库
+            echo "📂 Setting up repository..."
+            if [ -d "${REPO_DIR}" ]; then
+              echo "📝 Updating existing repository..."
+              cd "${REPO_DIR}"
+              git fetch origin
+              git checkout main
+              git pull origin main
+            else
+              echo "🔄 Cloning repository..."
+              git clone --branch main "${GITHUB_REPO}" "${REPO_DIR}"
+              cd "${REPO_DIR}"
+            fi
 
             # 1. 檢查 kind 集群是否存在，若不存在則建立
             if ! kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
@@ -98,8 +114,7 @@ jobs:
 
             # 4. 替換 deployment.yaml 中的用戶名並應用
             echo "📋 Applying Kubernetes manifests..."
-            sed "s/YOUR_DOCKERHUB_USERNAME/${DOCKERHUB_USERNAME}/g" k8s/deployment.yaml | kubectl apply -f -
-
+            sed "s/YOUR_DOCKERHUB_USERNAME/${DOCKERHUB_USERNAME}/g" ${REPO_DIR}/k8s/deployment.yaml | kubectl apply -f -
             # 5. 更新部署鏡像（使用 kubectl patch）
             echo "🔄 Updating image to ${IMAGE_TAG}..."
             kubectl patch deployment clouds-web --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/containers/0/image', 'value':'${{ env.REGISTRY }}/${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}'}]"
