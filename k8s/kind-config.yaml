@@ -14,6 +14,6 @@ nodes:
   #   hostPort: 30080
   #   protocol: TCP
 - role: worker
-# - role: worker
+- role: worker
 # networking:
 #   apiServerAddress: "127.0.0.1"
