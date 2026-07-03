@@ -60,8 +60,8 @@ metadata:
   labels:
     app: clouds-web
 spec:
-  type: NodePort
-  #  type: LoadBalancer
+  # type: NodePort
+  type: LoadBalancer
   selector:
     app: clouds-web
   ports:
