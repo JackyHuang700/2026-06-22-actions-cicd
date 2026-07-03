@@ -71,7 +71,7 @@ jobs:
             set -e
 
             export KUBECONFIG=/root/.kube/config
-            CLUSTER_NAME="clouds-web-cluster"
+            CLUSTER_NAME="clouds-web"
             DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
             IMAGE_NAME="${{ env.IMAGE_NAME }}"
             IMAGE_TAG="${{ steps.meta.outputs.version }}"
@@ -98,6 +98,8 @@ jobs:
               kind create cluster --config ${REPO_DIR}/k8s/kind-config.yaml
             else
               echo "✅ Kind cluster exists: ${CLUSTER_NAME}"
+              # 删除旧的不兼容集群
+              kind delete cluster --name clouds-web-cluster 2>/dev/null || true
             fi
 
             # 2. 設定集群上下文
