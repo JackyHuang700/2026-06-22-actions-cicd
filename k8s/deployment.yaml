@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: clouds-web
-        image: docker.io/YOUR_DOCKERHUB_USERNAME/clouds-web:latest
+        image: docker.io/jk2022jk/clouds-web:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
