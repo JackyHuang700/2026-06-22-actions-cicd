@@ -59,28 +59,120 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Aliyun ECS via SSH with Docker
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' # 僅在 main 分支 push 時觸發部署
+      - name: Deploy to Aliyun ECS via SSH with Kubernetes
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.ECS_HOST }}          # ECS 的公網 IP
-          username: ${{ secrets.ECS_USERNAME }}  # 登入帳號（例如 root）
-          key: ${{ secrets.ECS_SSH_KEY }}        # 你的 SSH 私鑰 (Private Key)
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USERNAME }}
+          key: ${{ secrets.ECS_SSH_KEY }}
           port: 22
           script: |
-            # 1. 登入 Docker Hub (如果你的鏡像是私有的)
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            set -e
 
-            # 2. 拉取最新鏡像 (以 latest 為例，你也可以改成動態 tag)
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            export KUBECONFIG=/root/.kube/config
+            CLUSTER_NAME="clouds-web-cluster"
+            DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            IMAGE_TAG="${{ steps.meta.outputs.version }}"
+            REPO_DIR="/opt/clouds-web"
+            GITHUB_REPO="${{ github.server_url }}/${{ github.repository }}"
 
-            # 3. 停止並刪除舊容器
-            docker stop ${{ env.IMAGE_NAME }} || true
-            docker rm ${{ env.IMAGE_NAME }} || true
+            # 0. 克隆或更新项目仓库
+            echo "📂 Setting up repository..."
+            if [ -d "${REPO_DIR}" ]; then
+              echo "📝 Updating existing repository..."
+              cd "${REPO_DIR}"
+              git fetch origin
+              git checkout main
+              git pull origin main
+            else
+              echo "🔄 Cloning repository..."
+              git clone --branch main "${GITHUB_REPO}" "${REPO_DIR}"
+              cd "${REPO_DIR}"
+            fi
 
-            # 4. 運行新容器 (請根據你的實際需求調整 port 和環境變數)
-            docker run -d \
-              --name ${{ env.IMAGE_NAME }} \
-              -p 80:3000 \
-              --restart always \
-              ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            # 1. 檢查 kind 集群是否存在，若不存在則建立
+            if ! kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
+              echo "📦 Creating kind cluster: ${CLUSTER_NAME}"
+              kind create cluster --name "${CLUSTER_NAME}"
+            else
+              echo "✅ Kind cluster exists: ${CLUSTER_NAME}"
+            fi
+
+            # 2. 設定集群上下文
+            kubectl config use-context "kind-${CLUSTER_NAME}"
+
+            # 3. 建立 docker registry secret
+            echo "🔐 Creating Docker registry secret..."
+            kubectl delete secret dockerhub-secret --ignore-not-found
+            kubectl create secret docker-registry dockerhub-secret \
+              --docker-server=docker.io \
+              --docker-username="${DOCKERHUB_USERNAME}" \
+              --docker-password="${{ secrets.DOCKERHUB_TOKEN }}" \
+              --docker-email="ci@example.com"
+
+            # 4. 替換 deployment.yaml 中的用戶名並應用
+            echo "📋 Applying Kubernetes manifests..."
+            sed "s/YOUR_DOCKERHUB_USERNAME/${DOCKERHUB_USERNAME}/g" ${REPO_DIR}/k8s/deployment.yaml | kubectl apply -f -
+
+            # 4.5 安装 Traefik Ingress Controller（如果还未安装）
+            echo "🔌 Setting up Traefik Ingress Controller..."
+            if ! helm list -n traefik 2>/dev/null | grep -q traefik; then
+              helm repo add traefik https://helm.traefik.io/traefik
+              helm repo update
+              helm install traefik traefik/traefik \
+                --namespace traefik \
+                --create-namespace \
+                --set ports.web.nodePort=30080 \
+                --set ports.websecure.nodePort=30443 \
+                --set service.type=NodePort \
+                --wait --timeout 5m
+            fi
+
+            # 4.6 应用 IngressRoute 资源
+            echo "📡 Applying Traefik IngressRoute..."
+            kubectl apply -f ${REPO_DIR}/k8s/ingress.yaml
+
+            # 5. 更新部署鏡像（使用 kubectl patch）
+            echo "🔄 Updating image to ${IMAGE_TAG}..."
+            kubectl patch deployment clouds-web --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/containers/0/image', 'value':'${{ env.REGISTRY }}/${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}'}]"
+
+            # 6. 等待部署更新完成
+            echo "⏳ Waiting for rollout..."
+            kubectl rollout status deployment/clouds-web --timeout=5m
+
+            # 7. 查看部署狀態
+            echo ""
+            echo "=== Deployment Status ==="
+            kubectl get pods -l app=clouds-web
+            kubectl get svc clouds-web-service
+
+      # - name: Deploy to Aliyun ECS via SSH
+      #   if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' # 僅在 main 分支 push 時觸發部署
+      #   uses: appleboy/ssh-action@v1.0.3
+      #   with:
+      #     host: ${{ secrets.ECS_HOST }}          # ECS 的公網 IP
+      #     username: ${{ secrets.ECS_USERNAME }}  # 登入帳號（例如 root）
+      #     key: ${{ secrets.ECS_SSH_KEY }}        # 你的 SSH 私鑰 (Private Key)
+      #     port: 22
+      #     script: |
+      #       # 1. 登入 Docker Hub (如果你的鏡像是私有的)
+      #       echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+      #       # 2. 拉取最新鏡像 (以 latest 為例，你也可以改成動態 tag)
+      #       docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+      #       # 3. 停止並刪除舊容器
+      #       docker stop ${{ env.IMAGE_NAME }} || true
+      #       docker rm ${{ env.IMAGE_NAME }} || true
+
+      #       # 4. 運行新容器 (請根據你的實際需求調整 port 和環境變數)
+      #       docker run -d \
+      #         --name ${{ env.IMAGE_NAME }} \
+      #         -p 80:3000 \
+      #         --restart always \
+      #         ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+
+
