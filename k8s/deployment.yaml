@@ -23,6 +23,13 @@ spec:
       labels:
         app: clouds-web
     spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Equal
+        value: ""
+        effect: NoSchedule
       containers:
       - name: clouds-web
         image: docker.io/jk2022jk/clouds-web:latest
