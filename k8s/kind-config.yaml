@@ -13,5 +13,5 @@ nodes:
   - containerPort: 30080
     hostPort: 30080
     protocol: TCP
-networking:
-  apiServerAddress: "127.0.0.1"
+# networking:
+#   apiServerAddress: "127.0.0.1"
