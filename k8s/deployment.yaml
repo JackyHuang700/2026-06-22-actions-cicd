@@ -29,7 +29,7 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
-          hostPort: 80
+          # hostPort: 80
           name: http
         # livenessProbe:
         #   httpGet:
@@ -66,8 +66,8 @@ metadata:
   labels:
     app: clouds-web
 spec:
-  # type: NodePort
-  type: ClusterIP
+  # type: ClusterIP
+  type: NodePort
   # type: LoadBalancer
   selector:
     app: clouds-web
@@ -75,5 +75,5 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 3000
-    # nodePort: 30080
+    nodePort: 30080
     name: http
