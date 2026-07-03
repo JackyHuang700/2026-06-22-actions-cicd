@@ -60,8 +60,8 @@ metadata:
   labels:
     app: clouds-web
 spec:
-  type: ClusterIP
-  # type: NodePort
+  # type: ClusterIP
+  type: NodePort
   # type: LoadBalancer
   selector:
     app: clouds-web
@@ -69,5 +69,5 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 3000
-    # nodePort: 30080
+    nodePort: 30080
     name: http

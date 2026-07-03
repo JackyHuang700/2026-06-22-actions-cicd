@@ -103,17 +103,6 @@ jobs:
             # 2. 設定集群上下文
             kubectl config use-context "kind-${CLUSTER_NAME}"
 
-            # 2.5. 安裝 ingress-nginx controller
-            echo "📦 Installing ingress-nginx controller..."
-            kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-
-            # 等待 ingress controller 就緒
-            echo "⏳ Waiting for ingress-nginx controller to be ready..."
-            kubectl wait --namespace ingress-nginx \
-              --for=condition=ready pod \
-              --selector=app.kubernetes.io/component=controller \
-              --timeout=120s || echo "⚠️  Ingress controller timeout, continuing..."
-
             # 3. 建立 docker registry secret
             echo "🔐 Creating Docker registry secret..."
             kubectl delete secret dockerhub-secret --ignore-not-found
@@ -126,10 +115,6 @@ jobs:
             # 4. 替換 deployment.yaml 中的用戶名並應用
             echo "📋 Applying Kubernetes manifests..."
             sed "s/YOUR_DOCKERHUB_USERNAME/${DOCKERHUB_USERNAME}/g" ${REPO_DIR}/k8s/deployment.yaml | kubectl apply -f -
-
-            # 4.5. 應用 Ingress 配置
-            echo "🌐 Applying Ingress configuration..."
-            kubectl apply -f ${REPO_DIR}/k8s/ingress.yaml
 
             # 5. 更新部署鏡像（使用 kubectl patch）
             echo "🔄 Updating image to ${IMAGE_TAG}..."
@@ -144,11 +129,6 @@ jobs:
             echo "=== Deployment Status ==="
             kubectl get pods -l app=clouds-web
             kubectl get svc clouds-web-service
-
-            # 7.5. 查看 Ingress 狀態
-            echo ""
-            echo "=== Ingress Status ==="
-            kubectl get ingress -n default
 
       # - name: Deploy to Aliyun ECS via SSH
       #   if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' # 僅在 main 分支 push 時觸發部署
