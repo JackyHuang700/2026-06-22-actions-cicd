@@ -59,7 +59,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Aliyun ECS via SSH with Kubernetes
+      - name: Deploy to K3s on Aliyun ECS via SSH
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -70,67 +70,51 @@ jobs:
           script: |
             set -e
 
-            export KUBECONFIG=/root/.kube/config
-            CLUSTER_NAME="clouds-web"
-            DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-            IMAGE_NAME="${{ env.IMAGE_NAME }}"
-            IMAGE_TAG="${{ steps.meta.outputs.version }}"
-            REPO_DIR="/opt/clouds-web"
-            GITHUB_REPO="${{ github.server_url }}/${{ github.repository }}"
+            # 1. 設置變量
+            DOCKER_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            DOCKER_TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
+            IMAGE_NAME="clouds-web"
+            REGISTRY="docker.io"
+            IMAGE_TAG="${REGISTRY}/${DOCKER_USERNAME}/${IMAGE_NAME}:latest"
+            NAMESPACE="clouds-web"
+            K3S_CONFIG="/etc/rancher/k3s/k3s.yaml"
 
-            # 0. 克隆或更新项目仓库
-            echo "📂 Setting up repository..."
-            if [ -d "${REPO_DIR}" ]; then
-              echo "📝 Updating existing repository..."
-              cd "${REPO_DIR}"
-              git fetch origin
-              git checkout main
-              git pull origin main
-            else
-              echo "🔄 Cloning repository..."
-              git clone --branch main "${GITHUB_REPO}" "${REPO_DIR}"
-              cd "${REPO_DIR}"
-            fi
+            # 2. 登入 Docker Hub
+            echo "${DOCKER_TOKEN}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
-            # 1. 檢查 kind 集群是否存在，若不存在則建立
-            if ! kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
-              echo "📦 Creating kind cluster: ${CLUSTER_NAME}"
-              kind create cluster --config ${REPO_DIR}/k8s/kind-config.yaml
-            else
-              echo "✅ Kind cluster exists: ${CLUSTER_NAME}"
-              # 删除旧的不兼容集群
-              kind delete cluster --name clouds-web-cluster 2>/dev/null || true
-            fi
+            # 3. 拉取最新鏡像
+            echo "🐳 Pulling latest Docker image: ${IMAGE_TAG}"
+            docker pull "${IMAGE_TAG}"
 
-            # 2. 設定集群上下文
-            kubectl config use-context "kind-${CLUSTER_NAME}"
+            # 4. 建立 Namespace（如果不存在）
+            echo "📦 Creating Kubernetes namespace..."
+            kubectl --kubeconfig="${K3S_CONFIG}" create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-            # 3. 建立 docker registry secret
+            # 5. 建立 Docker Hub 登入密鑰（用於 k8s 拉取私有鏡像）
             echo "🔐 Creating Docker registry secret..."
-            kubectl delete secret dockerhub-secret --ignore-not-found
-            kubectl create secret docker-registry dockerhub-secret \
-              --docker-server=docker.io \
-              --docker-username="${DOCKERHUB_USERNAME}" \
-              --docker-password="${{ secrets.DOCKERHUB_TOKEN }}" \
-              --docker-email="ci@example.com"
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" delete secret dockerhub-secret --ignore-not-found=true
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" create secret docker-registry dockerhub-secret \
+              --docker-server="${REGISTRY}" \
+              --docker-username="${DOCKER_USERNAME}" \
+              --docker-password="${DOCKER_TOKEN}" \
+              --docker-email="dummy@example.com"
 
-            # 4. 替換 deployment.yaml 中的用戶名並應用
-            echo "📋 Applying Kubernetes manifests..."
-            sed "s/YOUR_DOCKERHUB_USERNAME/${DOCKERHUB_USERNAME}/g" ${REPO_DIR}/k8s/deployment.yaml | kubectl apply -f -
+            # 6. 應用 Kubernetes 部署（自動拉取最新鏡像）
+            echo "🚀 Deploying to K3s..."
+            kubectl --kubeconfig="${K3S_CONFIG}" apply -f /root/deployment.yaml
 
-            # 5. 更新部署鏡像（使用 kubectl patch）
-            echo "🔄 Updating image to ${IMAGE_TAG}..."
-            kubectl patch deployment clouds-web --type='json' -p="[{'op': 'replace', 'path': '/spec/template/spec/containers/0/image', 'value':'${{ env.REGISTRY }}/${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}'}]"
+            # 7. 等待部署完成
+            echo "⏳ Waiting for deployment to be ready..."
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" rollout status deployment/clouds-web --timeout=5m
 
-            # 6. 等待部署更新完成
-            echo "⏳ Waiting for rollout..."
-            kubectl rollout status deployment/clouds-web --timeout=5m
+            # 8. 顯示部署狀態
+            echo "✅ Deployment completed!"
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" get pods -o wide
 
-            # 7. 查看部署狀態
-            echo ""
-            echo "=== Deployment Status ==="
-            kubectl get pods -l app=clouds-web
-            kubectl get svc clouds-web-service
+            # 9. 清理 Docker 登入
+            docker logout
+
+
 
       # - name: Deploy to Aliyun ECS via SSH
       #   if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' # 僅在 main 分支 push 時觸發部署
@@ -157,6 +141,3 @@ jobs:
       #         -p 80:3000 \
       #         --restart always \
       #         ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-
-
-

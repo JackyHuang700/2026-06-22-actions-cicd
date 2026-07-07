@@ -1,0 +1,241 @@
+# K3s 部署指南 - SSH 方式
+
+本指南介绍如何通过 GitHub Actions 自动化在 Aliyun ECS 上的 K3s 集群中部署应用。
+
+## 📋 前置条件
+
+- [ ] Aliyun ECS 实例已创建
+- [ ] K3s 已在 ECS 中安装 (`curl -sfL https://get.k3s.io | sh -`)
+- [ ] Docker 已在 ECS 中安装
+- [ ] ECS 可通过 SSH 访问
+- [ ] Docker Hub 账户已准备好
+
+## 🔧 第一步: 在 ECS 上准备环境
+
+### 1. SSH 连接到 ECS
+
+```bash
+ssh -i your-private-key.pem root@your-ecs-ip
+```
+
+### 2. 验证 K3s 状态
+
+```bash
+# 检查 K3s 是否运行
+sudo k3s kubectl get nodes
+
+# 或使用标准 kubectl（需要配置 kubeconfig）
+sudo kubectl get nodes --kubeconfig=/etc/rancher/k3s/k3s.yaml
+```
+
+### 3. 验证 Docker 安装
+
+```bash
+docker --version
+docker login
+```
+
+### 4. 上传部署脚本（可选）
+
+将 `k8s/deploy.sh` 上传到 ECS：
+
+```bash
+scp -i your-private-key.pem k8s/deploy.sh root@your-ecs-ip:/root/deploy.sh
+chmod +x /root/deploy.sh
+```
+
+## 🔐 第二步: 在 GitHub 中配置 Secrets
+
+进入你的 GitHub 仓库 → Settings → Secrets and variables → Actions，添加以下 Secret：
+
+| Secret 名称 | 说明 | 示例 |
+|---|---|---|
+| `ECS_HOST` | Aliyun ECS 的公网 IP 或域名 | `123.45.67.89` |
+| `ECS_USERNAME` | ECS 登录用户名 | `root` |
+| `ECS_SSH_KEY` | ECS SSH 私钥内容 | （粘贴完整的私钥） |
+| `DOCKERHUB_USERNAME` | Docker Hub 用户名 | `jk2022jk` |
+| `DOCKERHUB_TOKEN` | Docker Hub 访问令牌/密码 | （从 Docker Hub 生成） |
+
+### 如何生成 Docker Hub Token
+
+1. 登录 [Docker Hub](https://hub.docker.com)
+2. 进入 Account Settings → Security → New Access Token
+3. 创建新 Token，赋予 Read & Write 权限
+4. 复制 Token 内容到 GitHub Secret
+
+### 如何获取 SSH 私钥内容
+
+```bash
+# Linux/Mac
+cat ~/.ssh/your-private-key.pem
+
+# Windows PowerShell
+Get-Content C:\path\to\your-private-key.pem
+```
+
+## 🚀 第三步: 部署流程
+
+### 自动部署（推荐）
+
+当你推送到 `main` 分支时，GitHub Actions 会自动：
+
+1. ✅ 构建 Docker 镜像
+2. ✅ 推送到 Docker Hub
+3. ✅ 通过 SSH 连接到 ECS
+4. ✅ 拉取最新镜像
+5. ✅ 部署到 K3s
+6. ✅ 验证部署状态
+
+**工作流文件**: `.github/workflows/build-push.yml`
+
+### 手动部署（用于测试）
+
+如果想在 ECS 上手动部署：
+
+```bash
+# 登录 ECS
+ssh -i your-private-key.pem root@your-ecs-ip
+
+# 方法 1: 使用部署脚本
+export DOCKER_USERNAME="jk2022jk"
+export DOCKER_TOKEN="your-token-here"
+bash /root/deploy.sh docker.io/jk2022jk/clouds-web:latest
+
+# 方法 2: 手动执行 kubectl 命令
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml apply -f /root/deployment.yaml
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web rollout status deployment/clouds-web
+```
+
+## 📊 监控部署
+
+### 查看 Pod 状态
+
+```bash
+# 查看所有 Pod
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web get pods
+
+# 实时监控 Pod
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web get pods -w
+
+# 查看 Pod 日志
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web logs -f deployment/clouds-web
+```
+
+### 查看 Deployment 状态
+
+```bash
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web describe deployment clouds-web
+```
+
+### 查看 Service 信息
+
+```bash
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web get svc clouds-web-service
+```
+
+## 🔄 故障排查
+
+### 问题 1: 镜像拉取失败
+
+```bash
+# 检查 image pull secret
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web describe pod <pod-name>
+
+# 查看事件日志
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web describe events
+```
+
+**解决方案**: 重新创建 secret
+
+```bash
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web delete secret dockerhub-secret
+
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web create secret docker-registry dockerhub-secret \
+  --docker-server="docker.io" \
+  --docker-username="your-username" \
+  --docker-password="your-token" \
+  --docker-email="noreply@example.com"
+```
+
+### 问题 2: Pod 无法启动
+
+```bash
+# 查看 Pod 日志
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web logs -f <pod-name>
+
+# 查看 Pod 详细信息
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web describe pod <pod-name>
+```
+
+### 问题 3: GitHub Actions 部署失败
+
+1. 查看 GitHub Actions 日志：仓库 → Actions → 最新工作流 → 查看错误
+2. 检查 SSH 连接是否正常
+3. 验证所有 Secret 是否正确配置
+4. 确保 ECS 有足够的磁盘空间
+
+## 🛠️ 常用命令速查
+
+```bash
+# 重启 Deployment
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web rollout restart deployment/clouds-web
+
+# 删除所有 Pod（会自动重建）
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web delete pods --all
+
+# 强制更新镜像（拉取最新）
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web set image deployment/clouds-web \
+  clouds-web=docker.io/jk2022jk/clouds-web:latest --record
+
+# 查看资源使用情况
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web top pods
+
+# 获取所有资源
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web get all
+```
+
+## 📝 部署配置说明
+
+### deployment.yaml 关键字段
+
+```yaml
+# 副本数
+replicas: 2
+
+# 滚动更新策略
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1           # 最多增加 1 个 Pod
+    maxUnavailable: 0     # 不能有不可用的 Pod
+
+# 镜像配置
+image: docker.io/jk2022jk/clouds-web:latest
+imagePullPolicy: Always  # 每次都拉取最新镜像
+
+# 端口映射
+ports:
+  - containerPort: 3000   # 容器内端口
+    hostPort: 80          # 主机端口（在 K3s 中映射到 80）
+
+# 重启策略
+restartPolicy: Always     # 容器崩溃后自动重启
+
+# 镜像拉取密钥（用于私有仓库）
+imagePullSecrets:
+  - name: dockerhub-secret
+```
+
+## 🎯 最佳实践
+
+1. ✅ 使用标签来追踪镜像版本：`docker.io/jk2022jk/clouds-web:v1.0.0`
+2. ✅ 定期备份 K3s 数据：`sudo k3s etcd-snapshot save`
+3. ✅ 启用 Health Check（取消注释 deployment.yaml 中的 livenessProbe）
+4. ✅ 设置资源限制（取消注释 deployment.yaml 中的 resources）
+5. ✅ 定期更新 K3s 版本
+6. ✅ 监控磁盘空间，及时清理旧镜像：`docker image prune -a`
+7. ✅ 使用 HTTPS 保护应用（配置 Ingress）
+
+---
+
+**有任何问题？** 查看 [K3s 官方文档](https://docs.k3s.io/) 或 [Kubernetes 文档](https://kubernetes.io/docs/)
