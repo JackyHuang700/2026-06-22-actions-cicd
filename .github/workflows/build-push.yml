@@ -141,14 +141,25 @@ jobs:
 
             # 7. 等待部署完成
             echo "⏳ Waiting for deployment to be ready..."
-            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" rollout status deployment/clouds-web --timeout=5m
+            ROLLOUT_STATUS=0
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" rollout status deployment/clouds-web --timeout=5m || ROLLOUT_STATUS=$?
 
-            # 8. 顯示部署狀態
-            echo "✅ Deployment completed!"
+            # 8. 顯示部署狀態（無論成功與否都印出，方便除錯）
+            echo "== pods =="
             kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" get pods -o wide
+            echo "== describe pods =="
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" describe pods
+            echo "== events =="
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" get events --sort-by=.lastTimestamp
 
             # 9. 清理 Docker 登入
             docker logout
+
+            if [ "$ROLLOUT_STATUS" -ne 0 ]; then
+              echo "❌ Deployment rollout failed"
+              exit "$ROLLOUT_STATUS"
+            fi
+            echo "✅ Deployment completed!"
 
 
 

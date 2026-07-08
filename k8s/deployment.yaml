@@ -24,11 +24,10 @@ spec:
         app: clouds-web
     spec:
       nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
+        node-role.kubernetes.io/control-plane: "true"
       tolerations:
       - key: node-role.kubernetes.io/control-plane
-        operator: Equal
-        value: ""
+        operator: Exists
         effect: NoSchedule
       containers:
       - name: clouds-web
