@@ -23,19 +23,13 @@ spec:
       labels:
         app: clouds-web
     spec:
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: "true"
-      tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
       containers:
       - name: clouds-web
         image: docker.io/jk2022jk/clouds-web:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
-          hostPort: 80
+          # hostPort: 80
           name: http
         # livenessProbe:
         #   httpGet:
@@ -83,3 +77,21 @@ spec:
     targetPort: 3000
     # nodePort: 30080
     name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: clouds-web-ingress
+  namespace: clouds-web
+spec:
+  ingressClassName: traefik
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: clouds-web-service
+            port:
+              number: 80
