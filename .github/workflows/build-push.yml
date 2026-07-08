@@ -59,6 +59,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # TODO: 除錯用，確認完 Secrets 對應到正確主機/帳號後可移除此步驟
+      - name: Debug SSH connection
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USERNAME }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "== whoami =="
+            whoami
+            echo "== hostname =="
+            hostname
+            hostname -I
+            echo "== PATH =="
+            echo $PATH
+            echo "== which docker =="
+            which docker || echo "docker not found"
+            echo "== which kubectl =="
+            which kubectl || echo "kubectl not found"
+            echo "== k3s.yaml exists? =="
+            ls -l /etc/rancher/k3s/k3s.yaml || echo "k3s.yaml not found"
+
       - name: Deploy to K3s on Aliyun ECS via SSH
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
