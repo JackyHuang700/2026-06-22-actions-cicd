@@ -83,6 +83,10 @@ jobs:
             echo "== k3s.yaml exists? =="
             ls -l /etc/rancher/k3s/k3s.yaml || echo "k3s.yaml not found"
 
+      - name: Rename deployment.yaml for upload
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: cp k8s/deployment.yaml k8s/deployment-next.yaml
+
       - name: Sync deployment.yaml to ECS
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: appleboy/scp-action@v0.1.7
@@ -91,7 +95,7 @@ jobs:
           username: ${{ secrets.ECS_USERNAME }}
           key: ${{ secrets.ECS_SSH_KEY }}
           port: 22
-          source: "k8s/deployment.yaml"
+          source: "k8s/deployment-next.yaml"
           target: "/root"
           strip_components: 1
 
@@ -137,7 +141,7 @@ jobs:
 
             # 6. 應用 Kubernetes 部署（自動拉取最新鏡像）
             echo "🚀 Deploying to K3s..."
-            kubectl --kubeconfig="${K3S_CONFIG}" apply -f /root/deployment.yaml
+            kubectl --kubeconfig="${K3S_CONFIG}" apply -f /root/deployment-next.yaml
 
             # 7. 等待部署完成
             echo "⏳ Waiting for deployment to be ready..."
