@@ -130,6 +130,11 @@ jobs:
             echo "📦 Creating Kubernetes namespace..."
             kubectl --kubeconfig="${K3S_CONFIG}" create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
+            # 4.5 修正 deployment.yaml 中的 image 名稱，補上完整 registry/帳號路徑
+            #     （避免 K8s 誤解析成 docker.io/library/clouds-web-next，導致 pull access denied）
+            echo "🔧 Patching image reference in deployment-next.yaml..."
+            sed -i "s|image: clouds-web-next:latest|image: ${IMAGE_TAG}|" /root/deployment-next.yaml
+
             # 5. 建立 Docker Hub 登入密鑰（用於 k8s 拉取私有鏡像）
             echo "🔐 Creating Docker registry secret..."
             kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" delete secret dockerhub-secret --ignore-not-found=true
