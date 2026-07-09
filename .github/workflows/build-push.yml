@@ -12,7 +12,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: clouds-web
+  IMAGE_NAME: clouds-web-next
 
 jobs:
   build:
@@ -109,10 +109,10 @@ jobs:
             # 1. 設置變量
             DOCKER_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
             DOCKER_TOKEN="${{ secrets.DOCKERHUB_TOKEN }}"
-            IMAGE_NAME="clouds-web"
+            IMAGE_NAME="clouds-web-next"
             REGISTRY="docker.io"
             IMAGE_TAG="${REGISTRY}/${DOCKER_USERNAME}/${IMAGE_NAME}:latest"
-            NAMESPACE="clouds-web"
+            NAMESPACE="clouds-web-next"
             K3S_CONFIG="/etc/rancher/k3s/k3s.yaml"
 
             # 2. 登入 Docker Hub
@@ -142,7 +142,7 @@ jobs:
             # 7. 等待部署完成
             echo "⏳ Waiting for deployment to be ready..."
             ROLLOUT_STATUS=0
-            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" rollout status deployment/clouds-web --timeout=5m || ROLLOUT_STATUS=$?
+            kubectl --kubeconfig="${K3S_CONFIG}" -n "${NAMESPACE}" rollout status deployment/clouds-web-next --timeout=5m || ROLLOUT_STATUS=$?
 
             # 8. 顯示部署狀態（無論成功與否都印出，方便除錯）
             echo "== pods =="
