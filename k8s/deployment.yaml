@@ -1,13 +1,14 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: clouds-web
+  name: clouds-web-next
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: clouds-web
-  namespace: clouds-web
+  name: clouds-web-next
+  namespace: clouds-web-next
 spec:
   replicas: 2
   strategy:
@@ -17,72 +18,74 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: clouds-web
+      app: clouds-web-next
   template:
     metadata:
       labels:
-        app: clouds-web
+        app: clouds-web-next
     spec:
       containers:
-      - name: clouds-web
-        image: docker.io/jk2022jk/clouds-web:latest
+      - name: clouds-web-next
+        image: clouds-web-next:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
           # hostPort: 80
           name: http
-        # livenessProbe:
-        #   httpGet:
-        #     path: /
-        #     port: 3000
-        #   initialDelaySeconds: 30
-        #   periodSeconds: 10
-        #   timeoutSeconds: 5
-        #   failureThreshold: 3
-        # readinessProbe:
-        #   httpGet:
-        #     path: /
-        #     port: 3000
-        #   initialDelaySeconds: 10
-        #   periodSeconds: 5
-        #   timeoutSeconds: 3
-        #   failureThreshold: 2
-        # resources:
-        #   requests:
-        #     memory: "256Mi"
-        #     cpu: "250m"
-        #   limits:
-        #     memory: "512Mi"
-        #     cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
       imagePullSecrets:
       - name: dockerhub-secret
       restartPolicy: Always
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: clouds-web-service
-  namespace: clouds-web
+  name: clouds-web-next-service
+  namespace: clouds-web-next
   labels:
-    app: clouds-web
+    app: clouds-web-next
 spec:
   type: ClusterIP
   # type: NodePort
   # type: LoadBalancer
   selector:
-    app: clouds-web
+    app: clouds-web-next
   ports:
   - protocol: TCP
     port: 80
     targetPort: 3000
     # nodePort: 30080
     name: http
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: clouds-web-ingress
-  namespace: clouds-web
+  name: clouds-web-next-ingress
+  namespace: clouds-web-next
 spec:
   ingressClassName: traefik
   rules:
@@ -92,6 +95,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: clouds-web-service
+            name: clouds-web-next-service
             port:
               number: 80
