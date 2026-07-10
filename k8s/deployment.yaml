@@ -86,10 +86,17 @@ kind: Ingress
 metadata:
   name: clouds-web-next-ingress
   namespace: clouds-web-next
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: traefik
+  tls:
+  - hosts:
+    - jk66888.ccwu.cc
+    secretName: clouds-web-next-tls
   rules:
-  - http:
+  - host: jk66888.ccwu.cc
+    http:
       paths:
       - path: /
         pathType: Prefix

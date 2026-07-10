@@ -174,6 +174,44 @@ sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web describe pod <
 3. 验证所有 Secret 是否正确配置
 4. 确保 ECS 有足够的磁盘空间
 
+## 🌐 綁定網域與 HTTPS
+
+以 `jk66888.ccwu.cc` 為例：
+
+### 1. DNS
+
+在管理該子網域的 DNS 後台新增一筆 **A 記錄**，指向 ECS 的公網 IP（同 `ECS_HOST`）：
+
+```
+主機記錄: jk66888
+記錄值:   <ECS 公網 IP>
+```
+
+### 2. 安全群組
+
+確認 Aliyun 安全群組已開放 inbound TCP `80` 與 `443`。
+
+### 3. 安裝 cert-manager（僅需一次）
+
+```bash
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml
+
+# 等 cert-manager 的 Pod 都 Running 之後再套用 ClusterIssuer
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml apply -f k8s/cert-manager-issuer.yaml
+```
+
+### 4. 確認
+
+`k8s/deployment.yaml` 中的 Ingress 已設定 `host: jk66888.ccwu.cc` 並透過 `cert-manager.io/cluster-issuer: letsencrypt-prod` 自動簽發憑證到 `clouds-web-next-tls` 這個 Secret。下次 GitHub Actions 部署（或手動 `kubectl apply -f k8s/deployment.yaml`）後：
+
+```bash
+# 觀察憑證簽發狀態
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web-next get certificate
+sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web-next describe certificaterequest
+```
+
+DNS 生效、憑證簽發成功後即可用 `https://jk66888.ccwu.cc` 存取。
+
 ## 🛠️ 常用命令速查
 
 ```bash
