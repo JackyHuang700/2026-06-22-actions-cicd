@@ -212,6 +212,24 @@ sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml -n clouds-web-next describe 
 
 DNS 生效、憑證簽發成功後即可用 `https://jk66888.ccwu.cc` 存取。
 
+### 5. 新增子網域（走 Cloudflare Proxy，例如 test.jk66888.ccwu.cc）
+
+這個情境跟上面的 `jk66888.ccwu.cc` 不同：DNS 是在 Cloudflare 管理，而且開啟 Proxy（橘色雲朵），所以訪客端的 HTTPS 是由 **Cloudflare** 負責，不是 cert-manager。
+
+**Cloudflare 後台：**
+1. DNS → Add record
+   - Type: `A`
+   - Name: 如果 Cloudflare 裡的 zone 是 `jk66888.ccwu.cc`，填 `test`；如果 zone 是 `ccwu.cc`，填 `test.jk66888`
+   - IPv4 address: ECS 公網 IP（同 `ECS_HOST`）
+   - Proxy status: 🟠 Proxied
+2. SSL/TLS → Overview，模式選 **Flexible**（Cloudflare↔訪客走 HTTPS，Cloudflare↔origin 走 HTTP，origin 不需要額外憑證，設定最簡單）
+   - 如果之後想要 Cloudflare↔origin 這段也加密，可以改用 **Full**，但要在 Traefik 那端裝一張 Cloudflare Origin Certificate（Cloudflare 後台 SSL/TLS → Origin Server → Create Certificate），不能用 **Full (strict)**，因為 origin 目前沒有 Cloudflare 信任的憑證。
+
+**專案端（已完成）：**
+`k8s/deployment.yaml` 的 Ingress 已經多加一個 `host: test.jk66888.ccwu.cc` 規則，指到同一個 `clouds-web-next-service`（跟正式站同一份內容）。這個 host **沒有**放進 `tls.hosts`，所以 cert-manager 不會幫它跟 Let's Encrypt 申請憑證——因為流量是走 Cloudflare Proxy，HTTP-01 驗證請求會被 Cloudflare 擋下，而且訪客端的憑證本來就該由 Cloudflare 簽發，不需要 Let's Encrypt 重複簽一次。
+
+> 注意：如果之後把這筆記錄改回「僅 DNS」（灰色雲朵），要記得同時把 `test.jk66888.ccwu.cc` 加進 Ingress 的 `tls.hosts`，否則瀏覽器會用不到憑證。
+
 ## 🛠️ 常用命令速查
 
 ```bash
