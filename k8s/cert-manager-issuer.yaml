@@ -1,6 +1,7 @@
 # 一次性套用即可，不需要每次部署都重新 apply
 # 先決條件：叢集已安裝 cert-manager
-#   kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml
+# kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml
+# kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml apply -f k8s/cert-manager-issuer.yaml
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -15,3 +16,21 @@ spec:
     - http01:
         ingress:
           ingressClassName: traefik
+
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-prod
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: jacky8595125@gmail.com
+#     privateKeySecretRef:
+#       name: letsencrypt-prod-account-key
+#     solvers:
+#     - dns01:
+#         cloudflare:
+#           email: jacky8595125@gmail.com
+#           apiTokenSecretRef:
+#             name: cloudflare-api-token-secret
+#             key: api-token
